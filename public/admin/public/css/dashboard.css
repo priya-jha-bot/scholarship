@@ -1,0 +1,34 @@
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+@media (max-width: 768px) {
+  .dashboard-layout { grid-template-columns: 1fr; }
+}
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 1rem;
+}
+
+.sidebar nav a {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+}
+
+.sidebar nav a:hover, .sidebar nav a.active {
+  background: #f1f5f9;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.main-content {
+  padding: 1.5rem;
+}

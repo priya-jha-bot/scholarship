@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review Application - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <style>
+    .split-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 900px) {
+      .split-layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">⭐ Reviewer Portal</h3>
+      <nav>
+        <a href="/reviewer/dashboard.html">Dashboard</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>Application Evaluation</h2>
+        <a href="/reviewer/dashboard.html" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">← Back to Queue</a>
+      </div>
+
+      <div class="split-layout">
+        <!-- Left Column: Student Application & Documents -->
+        <div class="card" style="margin-bottom: 0;">
+          <h3>Applicant Details</h3>
+          <div style="margin: 1rem 0; font-size: 0.95rem;">
+            <p><strong>Name:</strong> <span id="rev-name">-</span></p>
+            <p><strong>University:</strong> <span id="rev-uni">-</span></p>
+            <p><strong>Major:</strong> <span id="rev-major">-</span> | <strong>GPA:</strong> <span id="rev-gpa">-</span></p>
+          </div>
+
+          <h4 style="margin-top: 1.25rem;">Attached Documents</h4>
+          <ul id="rev-docs" style="list-style: none; padding-left: 0; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <li>Loading documents...</li>
+          </ul>
+        </div>
+
+        <!-- Right Column: Scholarship Eligibility & Scoring Form -->
+        <div class="card" style="margin-bottom: 0;">
+          <h3>Eligibility Criteria & Scorecard</h3>
+          <div style="background: #f8fafc; padding: 0.75rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem;">
+            <strong id="sch-title">Scholarship Name</strong>
+            <p id="sch-eligibility" style="margin-top: 0.3rem; color: var(--muted);">-</p>
+          </div>
+
+          <form id="score-form">
+            <div class="form-group">
+              <label>Academic Merit Score (0 - 40)</label>
+              <input type="number" id="score-academic" class="form-control" min="0" max="40" required />
+            </div>
+            <div class="form-group">
+              <label>Essay & Statement Quality Score (0 - 40)</label>
+              <input type="number" id="score-essay" class="form-control" min="0" max="40" required />
+            </div>
+            <div class="form-group">
+              <label>Extra-curricular / Need Score (0 - 20)</label>
+              <input type="number" id="score-extra" class="form-control" min="0" max="20" required />
+            </div>
+            <div class="form-group">
+              <label>Reviewer Comments / Feedback</label>
+              <textarea id="rev-comments" class="form-control" rows="3" placeholder="Provide constructive feedback..." required></textarea>
+            </div>
+            <div class="form-group">
+              <label>Final Decision</label>
+              <select id="rev-decision" class="form-control" required>
+                <option value="">-- Select Decision --</option>
+                <option value="Approved">Approve</option>
+                <option value="Rejected">Reject</option>
+                <option value="Request Changes">Request Changes</option>
+              </select>
+            </div>
+            <button type="submit" id="submit-score-btn" class="btn" style="width: 100%; margin-top: 0.5rem;">Submit Evaluation</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireRole("reviewer");
+    const urlParams = new URLSearchParams(location.search);
+    const appId = urlParams.get("id");
+    let currentApp = null;
+
+    async function loadReviewData() {
+      if (!appId) {
+        showToast("No application specified.", true);
+        location.href = "/reviewer/dashboard.html";
+        return;
+      }
+
+      try {
+        const [appsData, schData] = await Promise.all([
+          apiFetch("/reviewer/applications"),
+          apiFetch("/scholarships")
+        ]);
+
+        const apps = Array.isArray(appsData) ? appsData : (appsData.applications || []);
+        currentApp = apps.find(a => String(a.id) === String(appId));
+
+        if (!currentApp) {
+          showToast("Application not found.", true);
+          return;
+        }
+
+        document.getElementById("rev-name").textContent = currentApp.name || "-";
+        document.getElementById("rev-uni").textContent = currentApp.university || "-";
+        document.getElementById("rev-major").textContent = currentApp.major || "-";
+        document.getElementById("rev-gpa").textContent = currentApp.gpa || "-";
+
+        const docs = currentApp.documents || {};
+        document.getElementById("rev-docs").innerHTML = `
+          <li>📄 <a href="${docs.transcript || '#'}" target="_blank" style="color: var(--primary);">View Academic Transcript</a></li>
+          <li>📝 <a href="${docs.essay || '#'}" target="_blank" style="color: var(--primary);">View Statement of Purpose</a></li>
+          <li>🪪 <a href="${docs.studentId || '#'}" target="_blank" style="color: var(--primary);">View University ID Card</a></li>
+        `;
+
+        const scholarships = Array.isArray(schData) ? schData : (schData.scholarships || []);
+        const matchedSch = scholarships.find(s => String(s.id) === String(currentApp.scholarshipId)) || {};
+        document.getElementById("sch-title").textContent = matchedSch.name || currentApp.scholarshipName || "Scholarship";
+        document.getElementById("sch-eligibility").textContent = matchedSch.eligibility || "No specific criteria listed.";
+      } catch (err) {
+        showToast("Failed to load application details.", true);
+      }
+    }
+
+    document.getElementById("score-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById("submit-score-btn");
+      btn.disabled = true;
+      btn.textContent = "Submitting score...";
+
+      const s1 = Number(document.getElementById("score-academic").value);
+      const s2 = Number(document.getElementById("score-essay").value);
+      const s3 = Number(document.getElementById("score-extra").value);
+      const overallScore = s1 + s2 + s3;
+
+      const payload = {
+        overallScore,
+        comments: document.getElementById("rev-comments").value,
+        decision: document.getElementById("rev-decision").value
+      };
+
+      try {
+        await apiFetch(`/reviewer/applications/${appId}/score`, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        showToast("Evaluation submitted successfully!");
+        setTimeout(() => location.href = "/reviewer/dashboard.html", 1500);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Submit Evaluation";
+      }
+    };
+
+    loadReviewData();
+  </script>
+</body>
+</html>

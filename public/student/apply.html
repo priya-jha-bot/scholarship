@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apply - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <style>
+    .step-content { display: none; }
+    .step-content.active { display: block; }
+    .step-indicator { display: flex; gap: 1rem; margin-bottom: 1.5rem; font-weight: 600; color: var(--muted); }
+    .step-indicator span.active { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 0.2rem; }
+  </style>
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">🎓 Student Portal</h3>
+      <nav>
+        <a href="/student/dashboard.html">Dashboard</a>
+        <a href="/student/apply.html" class="active">Apply for Scholarship</a>
+        <a href="/student/status.html">Application Status</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <h2>Scholarship Application Wizard</h2>
+      <p style="color: var(--muted); margin-bottom: 1.5rem;">Complete the steps below to submit your application.</p>
+
+      <div class="card" style="max-width: 700px;">
+        <div class="step-indicator">
+          <span id="ind-1" class="active">1. Details</span>
+          <span id="ind-2">2. Documents</span>
+          <span id="ind-3">3. Review & Submit</span>
+        </div>
+
+        <form id="apply-form">
+          <div class="form-group">
+            <label>Select Scholarship</label>
+            <select id="scholarship-select" class="form-control" required>
+              <option value="">-- Choose Scholarship --</option>
+            </select>
+          </div>
+
+          <!-- Step 1: Personal & Academic Details -->
+          <div class="step-content active" id="step-1">
+            <h4>Step 1: Academic & Personal Details</h4>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem;">Prefilled from your profile. Update if needed.</p>
+            <div class="form-group">
+              <label>Full Name / Username</label>
+              <input type="text" id="p-name" class="form-control" required />
+            </div>
+            <div class="form-group">
+              <label>University / College</label>
+              <input type="text" id="p-university" class="form-control" required />
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <div class="form-group">
+                <label>Major</label>
+                <input type="text" id="p-major" class="form-control" required />
+              </div>
+              <div class="form-group">
+                <label>Current GPA</label>
+                <input type="number" step="0.01" id="p-gpa" class="form-control" required />
+              </div>
+            </div>
+            <button type="button" class="btn" onclick="goToStep(2)" style="margin-top: 1rem;">Next: Upload Documents →</button>
+          </div>
+
+          <!-- Step 2: Document Uploads -->
+          <div class="step-content" id="step-2">
+            <h4>Step 2: Upload Documents</h4>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem;">Accepted formats: PDF, JPG, PNG (Max size: 5MB each)</p>
+            <div class="form-group">
+              <label>Academic Transcript</label>
+              <input type="file" id="file-transcript" class="form-control" accept=".pdf,.jpg,.png" required />
+            </div>
+            <div class="form-group">
+              <label>Statement of Purpose Essay</label>
+              <input type="file" id="file-essay" class="form-control" accept=".pdf,.jpg,.png" required />
+            </div>
+            <div class="form-group">
+              <label>University Student ID Card</label>
+              <input type="file" id="file-id" class="form-control" accept=".pdf,.jpg,.png" required />
+            </div>
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+              <button type="button" class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+              <button type="button" class="btn" onclick="validateAndGoToStep3()">Next: Review & Submit →</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Review & Submit -->
+          <div class="step-content" id="step-3">
+            <h4>Step 3: Review & Submit</h4>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem;">Please confirm your details before submitting.</p>
+            <div id="review-summary" class="card" style="background: #f8fafc; margin-bottom: 1rem;"></div>
+            <div style="display: flex; gap: 1rem;">
+              <button type="button" class="btn btn-secondary" onclick="goToStep(2)">← Back</button>
+              <button type="submit" id="submit-btn" class="btn">Submit Application</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireRole("student");
+    let currentStep = 1;
+
+    async function initPage() {
+      try {
+        const [userProfile, scholarshipsData] = await Promise.all([
+          apiFetch("/auth/me").catch(() => JSON.parse(sessionStorage.getItem("user") || "{}")),
+          apiFetch("/scholarships")
+        ]);
+
+        document.getElementById("p-name").value = userProfile.username || "";
+        document.getElementById("p-university").value = userProfile.university || "";
+        document.getElementById("p-major").value = userProfile.major || "";
+        document.getElementById("p-gpa").value = userProfile.gpa || "";
+
+        const scholarships = Array.isArray(scholarshipsData) ? scholarshipsData : (scholarshipsData.scholarships || []);
+        const select = document.getElementById("scholarship-select");
+        select.innerHTML = `<option value="">-- Choose Scholarship --</option>` + scholarships.map(s => `<option value="${s.id}">${s.name} (₹${Number(s.amount).toLocaleString('en-IN')})</option>`).join("");
+
+        const urlParams = new URLSearchParams(location.search);
+        const preselectId = urlParams.get("id");
+        if (preselectId) select.value = preselectId;
+      } catch (err) {
+        showToast("Failed to load initial data", true);
+      }
+    }
+
+    function goToStep(step) {
+      const scholarshipId = document.getElementById("scholarship-select").value;
+      if (step > 1 && !scholarshipId) {
+        showToast("Please select a scholarship first.", true);
+        return;
+      }
+      currentStep = step;
+      document.querySelectorAll(".step-content").forEach(el => el.classList.remove("active"));
+      document.getElementById(`step-${step}`).classList.add("active");
+
+      document.querySelectorAll(".step-indicator span").forEach((el, idx) => {
+        el.classList.toggle("active", idx + 1 === step);
+      });
+
+      if (step === 3) {
+        buildReviewSummary();
+      }
+    }
+
+    function validateAndGoToStep3() {
+      const files = [
+        document.getElementById("file-transcript").files[0],
+        document.getElementById("file-essay").files[0],
+        document.getElementById("file-id").files[0]
+      ];
+
+      for (let f of files) {
+        if (!f) {
+          showToast("Please attach all required documents.", true);
+          return;
+        }
+        if (f.size > 5 * 1024 * 1024) {
+          showToast(`File ${f.name} exceeds 5MB limit.`, true);
+          return;
+        }
+      }
+      goToStep(3);
+    }
+
+    function buildReviewSummary() {
+      const sel = document.getElementById("scholarship-select");
+      const scholarshipName = sel.options[sel.selectedIndex].text;
+      const summaryEl = document.getElementById("review-summary");
+
+      summaryEl.innerHTML = `
+        <p><strong>Scholarship:</strong> ${scholarshipName}</p>
+        <p><strong>Name:</strong> ${document.getElementById("p-name").value}</p>
+        <p><strong>University:</strong> ${document.getElementById("p-university").value}</p>
+        <p><strong>Major:</strong> ${document.getElementById("p-major").value} | <strong>GPA:</strong> ${document.getElementById("p-gpa").value}</p>
+        <p><strong>Documents Attached:</strong> Transcript, Essay, Student ID ✓</p>
+      `;
+    }
+
+    document.getElementById("apply-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById("submit-btn");
+      submitBtn.disabled = true; // Prevent duplicate clicks
+      submitBtn.textContent = "Submitting application...";
+
+      const formData = new FormData();
+      formData.append("scholarshipId", document.getElementById("scholarship-select").value);
+      formData.append("name", document.getElementById("p-name").value);
+      formData.append("university", document.getElementById("p-university").value);
+      formData.append("major", document.getElementById("p-major").value);
+      formData.append("gpa", document.getElementById("p-gpa").value);
+      formData.append("transcript", document.getElementById("file-transcript").files[0]);
+      formData.append("essay", document.getElementById("file-essay").files[0]);
+      formData.append("studentId", document.getElementById("file-id").files[0]);
+
+      try {
+        await apiFetch("/student/apply", {
+          method: "POST",
+          body: formData
+        });
+        showToast("Application submitted successfully!");
+        setTimeout(() => location.href = "/student/status.html", 1500);
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Application";
+      }
+    };
+
+    initPage();
+  </script>
+</body>
+</html>
