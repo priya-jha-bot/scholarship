@@ -1,0 +1,12 @@
+# Databases only (run the API on your machine):   docker compose -f docker-compose.db.yml up -d
+services:
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_USER: scholarship, POSTGRES_PASSWORD: scholarship, POSTGRES_DB: scholarship }
+    ports: ["5433:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+    volumes: [mongodata:/data/db]
+volumes: { pgdata: {}, mongodata: {} }

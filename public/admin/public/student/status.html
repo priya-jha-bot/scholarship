@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Status - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <style>
+    .timeline {
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      margin: 1.5rem 0;
+      padding: 0 1rem;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 10%;
+      right: 10%;
+      height: 3px;
+      background: var(--border);
+      z-index: 1;
+    }
+    .timeline-step {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .timeline-dot {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 0.4rem auto;
+      font-weight: 600;
+    }
+    .timeline-step.completed .timeline-dot {
+      background: var(--primary);
+      color: #fff;
+    }
+    .timeline-step.active .timeline-dot {
+      background: #f59e0b;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">🎓 Student Portal</h3>
+      <nav>
+        <a href="/student/dashboard.html">Dashboard</a>
+        <a href="/student/apply.html">Apply for Scholarship</a>
+        <a href="/student/status.html" class="active">Application Status</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <h2>Application Status & Timeline</h2>
+      <p style="color: var(--muted); margin-bottom: 1.5rem;">Track your submission progress through verification and review stages.</p>
+
+      <div id="status-container">
+        <p style="color: var(--muted);">Loading status...</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireRole("student");
+
+    async function loadStatus() {
+      const container = document.getElementById("status-container");
+      try {
+        const data = await apiFetch("/student/applications");
+        const apps = Array.isArray(data) ? data : (data.applications || []);
+
+        if (apps.length === 0) {
+          container.innerHTML = `<div class="card"><p style="color: var(--muted);">No active applications found.</p></div>`;
+          return;
+        }
+
+        const stages = ["Submitted", "Verified", "Under Review", "Decision"];
+
+        container.innerHTML = apps.map(app => {
+          const currentStatus = app.status || "Submitted";
+          let activeIndex = stages.findIndex(s => s.toLowerCase() === currentStatus.toLowerCase());
+          if (activeIndex === -1) activeIndex = 0;
+
+          return `
+            <div class="card" style="margin-bottom: 1.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                <div>
+                  <h3>${app.scholarshipName || 'Scholarship #' + app.scholarshipId}</h3>
+                  <p style="font-size: 0.85rem; color: var(--muted);">Submitted on ${new Date(app.createdAt || Date.now()).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  ${renderBadge(currentStatus)}
+                </div>
+              </div>
+
+              <div class="timeline">
+                ${stages.map((stage, idx) => {
+                  let cls = "";
+                  if (idx < activeIndex) cls = "completed";
+                  else if (idx === activeIndex) cls = "active";
+                  return `
+                    <div class="timeline-step ${cls}">
+                      <div class="timeline-dot">${idx + 1}</div>
+                      <span>${stage}</span>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+
+              ${app.reviewerComments ? `
+                <div style="background: #f1f5f9; padding: 0.75rem; border-radius: 6px; margin-top: 1rem; font-size: 0.9rem;">
+                  <strong>Reviewer Comments:</strong> ${app.reviewerComments}
+                </div>
+              ` : ''}
+
+              ${currentStatus.toLowerCase() !== 'withdrawn' && currentStatus.toLowerCase() !== 'approved' ? `
+                <div style="margin-top: 1rem; text-align: right;">
+                  <button class="btn btn-danger" onclick="withdrawApp('${app.id}')" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Withdraw Application</button>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join("");
+      } catch (err) {
+        container.innerHTML = `<div class="card"><p style="color: #dc2626;">Failed to load application status.</p></div>`;
+      }
+    }
+
+    async function withdrawApp(id) {
+      if (!confirm("Are you sure you want to withdraw this application?")) return;
+      try {
+        await apiFetch(`/student/applications/${id}/withdraw`, { method: "POST" });
+        showToast("Application withdrawn successfully.");
+        loadStatus();
+      } catch (err) {
+        // apiFetch handles toast
+      }
+    }
+
+    loadStatus();
+  </script>
+</body>
+</html>

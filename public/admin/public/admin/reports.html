@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports & Export - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">🛡️ Admin Portal</h3>
+      <nav>
+        <a href="/admin/dashboard.html">Dashboard</a>
+        <a href="/admin/verify.html">Verify Applications</a>
+        <a href="/admin/scholarships.html">Manage Scholarships</a>
+        <a href="/admin/reports.html" class="active">Reports & Export</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+        <div>
+          <h2>Application Reports</h2>
+          <p style="color: var(--muted);">Summary breakdown by application status and CSV data export.</p>
+        </div>
+        <button id="export-csv-btn" class="btn" onclick="exportCSV()">📥 Export All to CSV</button>
+      </div>
+
+      <div class="table-wrap card" style="max-width: 650px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Application Status</th>
+              <th>Badge Preview</th>
+              <th>Total Count</th>
+            </tr>
+          </thead>
+          <tbody id="report-tbody">
+            <tr><td colspan="3" style="text-align: center; color: var(--muted);">Generating report...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireRole("admin");
+    let reportApps = [];
+
+    async function loadReports() {
+      const tbody = document.getElementById("report-tbody");
+      try {
+        const data = await apiFetch("/admin/applications");
+        reportApps = Array.isArray(data) ? data : (data.applications || []);
+
+        const statuses = ["Pending", "Verified", "Approved", "Rejected"];
+        tbody.innerHTML = statuses.map(status => {
+          const count = reportApps.filter(a => {
+            const st = (a.status || "Pending").toLowerCase();
+            if (status === "Pending") return st === "pending" || st === "submitted";
+            return st === status.toLowerCase();
+          }).length;
+
+          return `
+            <tr>
+              <td><strong>${status}</strong></td>
+              <td>${renderBadge(status)}</td>
+              <td style="font-size: 1.1rem; font-weight: 700;">${count}</td>
+            </tr>
+          `;
+        }).join("") + `
+          <tr style="background: #f8fafc;">
+            <td colspan="2"><strong>Total Applications</strong></td>
+            <td style="font-size: 1.1rem; font-weight: 700;">${reportApps.length}</td>
+          </tr>
+        `;
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #dc2626;">Failed to load report data.</td></tr>`;
+      }
+    }
+
+    function exportCSV() {
+      if (reportApps.length === 0) {
+        showToast("No records available to export.", true);
+        return;
+      }
+
+      const headers = ["ID", "Student Name", "University", "Major", "GPA", "Scholarship", "Status", "Score"];
+      const rows = reportApps.map(a => [
+        a.id || "",
+        `"${(a.name || "").replace(/"/g, '""')}"`,
+        `"${(a.university || "").replace(/"/g, '""')}"`,
+        `"${(a.major || "").replace(/"/g, '""')}"`,
+        a.gpa || "",
+        `"${(a.scholarshipName || "").replace(/"/g, '""')}"`,
+        a.status || "Pending",
+        a.overallScore || ""
+      ]);
+
+      const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `scholarship_report_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast("CSV downloaded!");
+    }
+
+    loadReports();
+  </script>
+</body>
+</html>

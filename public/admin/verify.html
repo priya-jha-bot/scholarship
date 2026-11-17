@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Applications - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link rel="stylesheet" href="/css/forms.css">
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">🛡️ Admin Portal</h3>
+      <nav>
+        <a href="/admin/dashboard.html">Dashboard</a>
+        <a href="/admin/verify.html" class="active">Verify Applications</a>
+        <a href="/admin/scholarships.html">Manage Scholarships</a>
+        <a href="/admin/reports.html">Reports & Export</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <h2>Application Verification Queue</h2>
+      <p style="color: var(--muted); margin-bottom: 1rem;">Verify student documents before forwarding applications to reviewers.</p>
+
+      <!-- Filters -->
+      <div class="card" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="filter-search" class="form-control" placeholder="Search student or scholarship..." style="max-width: 300px;" />
+        <select id="filter-status" class="form-control" style="max-width: 200px;">
+          <option value="Pending">Pending / Submitted</option>
+          <option value="All">All Applications</option>
+          <option value="Verified">Verified</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </div>
+
+      <!-- Queue Table -->
+      <div class="table-wrap card">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>University</th>
+              <th>Scholarship</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="verify-tbody">
+            <tr><td colspan="5" style="text-align: center; color: var(--muted);">Loading queue...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="verify-pagination" style="display: flex; justify-content: center; align-items: center; margin: 1rem 0;"></div>
+
+      <!-- Detail & Checklist Panel -->
+      <div id="detail-panel" class="card" style="display: none; border-left: 4px solid var(--primary); margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 id="det-title">Application Details</h3>
+          <button class="btn btn-secondary" style="padding: 0.3rem 0.7rem;" onclick="closeDetail()">Close</button>
+        </div>
+
+        <div class="grid" style="margin-bottom: 1.25rem;">
+          <div>
+            <p><strong>Student Name:</strong> <span id="det-name"></span></p>
+            <p><strong>University:</strong> <span id="det-uni"></span></p>
+            <p><strong>Major & GPA:</strong> <span id="det-acad"></span></p>
+          </div>
+          <div>
+            <p style="margin-bottom: 0.5rem;"><strong>Uploaded Documents:</strong></p>
+            <ul id="det-docs" style="list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 0.4rem;"></ul>
+          </div>
+        </div>
+
+        <div style="background: #f8fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+          <h4 style="margin-bottom: 0.5rem;">Admin Verification Checklist</h4>
+          <label style="display: block; margin-bottom: 0.4rem; cursor: pointer;">
+            <input type="checkbox" class="verify-check" /> University is recognized & accredited
+          </label>
+          <label style="display: block; margin-bottom: 0.4rem; cursor: pointer;">
+            <input type="checkbox" class="verify-check" /> Uploaded documents (Transcript, Essay, ID) are clear & valid
+          </label>
+          <label style="display: block; cursor: pointer;">
+            <input type="checkbox" class="verify-check" /> Academic details match official transcript
+          </label>
+        </div>
+
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+          <button id="btn-verify-send" class="btn" onclick="submitVerification('Verified')">✓ Verify & Send to Reviewer</button>
+          <button id="btn-reject-open" class="btn btn-danger" onclick="toggleRejectBox()">✕ Reject Application</button>
+        </div>
+
+        <div id="reject-box" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+          <div class="form-group">
+            <label>Reason for Rejection (visible to student)</label>
+            <input type="text" id="reject-reason" class="form-control" placeholder="e.g. Unreadable transcript or ineligible university..." />
+          </div>
+          <button class="btn btn-danger" onclick="submitVerification('Rejected')">Confirm Rejection</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireRole("admin");
+    let allApps = [];
+    let currentPage = 1;
+    const pageSize = 10;
+    let selectedApp = null;
+
+    async function loadQueue() {
+      const tbody = document.getElementById("verify-tbody");
+      try {
+        const data = await apiFetch("/admin/applications");
+        allApps = Array.isArray(data) ? data : (data.applications || []);
+        renderQueue();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #dc2626;">Failed to load applications.</td></tr>`;
+      }
+    }
+
+    function renderQueue() {
+      const tbody = document.getElementById("verify-tbody");
+      const query = document.getElementById("filter-search").value.toLowerCase();
+      const statusFilter = document.getElementById("filter-status").value;
+
+      const filtered = allApps.filter(app => {
+        const st = (app.status || "Pending").toLowerCase();
+        const matchesStatus =
+          statusFilter === "All" ||
+          (statusFilter === "Pending" && (st === "pending" || st === "submitted")) ||
+          st === statusFilter.toLowerCase();
+
+        const matchesQuery =
+          (app.name || "").toLowerCase().includes(query) ||
+          (app.scholarshipName || "").toLowerCase().includes(query);
+
+        return matchesStatus && matchesQuery;
+      });
+
+      const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+      if (currentPage > totalPages) currentPage = 1;
+      const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+      if (pageItems.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--muted);">No matching applications found.</td></tr>`;
+      } else {
+        tbody.innerHTML = pageItems.map(app => `
+          <tr>
+            <td><strong>${app.name || 'Student #' + app.studentId}</strong></td>
+            <td>${app.university || '-'}</td>
+            <td>${app.scholarshipName || 'Scholarship #' + app.scholarshipId}</td>
+            <td>${renderBadge(app.status || 'Pending')}</td>
+            <td>
+              <button class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.85rem;" onclick="openDetail('${app.id}')">Inspect</button>
+            </td>
+          </tr>
+        `).join("");
+      }
+
+      renderPagination(document.getElementById("verify-pagination"), currentPage, totalPages, (p) => {
+        currentPage = p;
+        renderQueue();
+      });
+    }
+
+    function openDetail(id) {
+      selectedApp = allApps.find(a => String(a.id) === String(id));
+      if (!selectedApp) return;
+
+      document.getElementById("det-title").textContent = `Reviewing: ${selectedApp.scholarshipName || 'Application #' + selectedApp.id}`;
+      document.getElementById("det-name").textContent = selectedApp.name || "-";
+      document.getElementById("det-uni").textContent = selectedApp.university || "-";
+      document.getElementById("det-acad").textContent = `${selectedApp.major || '-'} (GPA: ${selectedApp.gpa || '-'})`;
+
+      const docs = selectedApp.documents || {};
+      const docList = document.getElementById("det-docs");
+      docList.innerHTML = `
+        <li>📄 <a href="${docs.transcript || '#'}" target="_blank" style="color: var(--primary);">View Academic Transcript</a></li>
+        <li>📝 <a href="${docs.essay || '#'}" target="_blank" style="color: var(--primary);">View Statement of Purpose</a></li>
+        <li>🪪 <a href="${docs.studentId || '#'}" target="_blank" style="color: var(--primary);">View University ID Card</a></li>
+      `;
+
+      document.querySelectorAll(".verify-check").forEach(cb => cb.checked = false);
+      document.getElementById("reject-box").style.display = "none";
+      document.getElementById("reject-reason").value = "";
+      document.getElementById("detail-panel").style.display = "block";
+      document.getElementById("detail-panel").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function closeDetail() {
+      document.getElementById("detail-panel").style.display = "none";
+      selectedApp = null;
+    }
+
+    function toggleRejectBox() {
+      const box = document.getElementById("reject-box");
+      box.style.display = box.style.display === "none" ? "block" : "none";
+    }
+
+    async function submitVerification(status) {
+      if (!selectedApp) return;
+
+      if (status === "Verified") {
+        const allChecked = Array.from(document.querySelectorAll(".verify-check")).every(cb => cb.checked);
+        if (!allChecked) {
+          showToast("Please complete all 3 verification checklist items first.", true);
+          return;
+        }
+      }
+
+      const reason = document.getElementById("reject-reason").value.trim();
+      if (status === "Rejected" && !reason) {
+        showToast("Please enter a rejection reason.", true);
+        return;
+      }
+
+      try {
+        await apiFetch(`/admin/applications/${selectedApp.id}/verify`, {
+          method: "POST",
+          body: JSON.stringify({ status, reason })
+        });
+        showToast(`Application marked as ${status}.`);
+        closeDetail();
+        loadQueue();
+      } catch (err) {}
+    }
+
+    document.getElementById("filter-search").addEventListener("input", debounce(() => {
+      currentPage = 1;
+      renderQueue();
+    }, 300));
+    document.getElementById("filter-status").addEventListener("change", () => {
+      currentPage = 1;
+      renderQueue();
+    });
+
+    loadQueue();
+  </script>
+</body>
+</html>

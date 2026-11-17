@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Dashboard - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">🎓 Student Portal</h3>
+      <nav>
+        <a href="/student/dashboard.html" class="active">Dashboard</a>
+        <a href="/student/apply.html">Apply for Scholarship</a>
+        <a href="/student/status.html">Application Status</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <h2>Welcome, Student 👋</h2>
+      <p style="color: var(--muted); margin-bottom: 1.5rem;">Here are the scholarships open for applications and your active submissions.</p>
+
+      <h3>Eligible Scholarships</h3>
+      <div id="eligible-list" class="grid" style="margin: 1rem 0 2rem 0;"></div>
+
+      <h3>Your Applications Summary</h3>
+      <div class="table-wrap card">
+        <table>
+          <thead>
+            <tr>
+              <th>Scholarship</th>
+              <th>Applied On</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="my-applications-tbody">
+            <tr><td colspan="4" style="text-align: center; color: var(--muted);">Loading applications...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    const user = requireRole("student");
+
+    async function loadDashboardData() {
+      const eligibleEl = document.getElementById("eligible-list");
+      const tbodyEl = document.getElementById("my-applications-tbody");
+
+      try {
+        const [scholarshipsData, appsData] = await Promise.all([
+          apiFetch("/scholarships"),
+          apiFetch("/student/applications")
+        ]);
+
+        const scholarships = Array.isArray(scholarshipsData) ? scholarshipsData : (scholarshipsData.scholarships || []);
+        const myApps = Array.isArray(appsData) ? appsData : (appsData.applications || []);
+
+        // Render eligible scholarships
+        if (scholarships.length === 0) {
+          eligibleEl.innerHTML = `<p style="color: var(--muted);">No scholarships available right now.</p>`;
+        } else {
+          eligibleEl.innerHTML = scholarships.slice(0, 4).map(s => `
+            <div class="card" style="margin-bottom: 0;">
+              <h4>${s.name}</h4>
+              <p style="color: var(--primary); font-weight: 600; margin: 0.3rem 0;">₹${Number(s.amount || 0).toLocaleString('en-IN')}</p>
+              <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem;">Deadline: ${s.deadline || 'Open'}</p>
+              <a href="/student/apply.html?id=${s.id}" class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Apply Now</a>
+            </div>
+          `).join("");
+        }
+
+        // Render my applications table
+        if (myApps.length === 0) {
+          tbodyEl.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--muted);">You haven't applied to any scholarships yet.</td></tr>`;
+        } else {
+          tbodyEl.innerHTML = myApps.map(app => `
+            <tr>
+              <td><strong>${app.scholarshipName || 'Scholarship #' + app.scholarshipId}</strong></td>
+              <td>${new Date(app.createdAt || Date.now()).toLocaleDateString()}</td>
+              <td>${renderBadge(app.status || 'Pending')}</td>
+              <td><a href="/student/status.html" style="color: var(--primary); text-decoration: none; font-weight: 500;">View Timeline</a></td>
+            </tr>
+          `).join("");
+        }
+      } catch (err) {
+        eligibleEl.innerHTML = `<p style="color: #dc2626;">Failed to load data.</p>`;
+        tbodyEl.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #dc2626;">Failed to load applications.</td></tr>`;
+      }
+    }
+
+    loadDashboardData();
+  </script>
+</body>
+</html>

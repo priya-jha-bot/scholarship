@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scholarship Portal - Find Your Funding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="navbar">
+    <h2>🎓 ScholarshipPortal</h2>
+    <div>
+      <a href="/login.html" class="btn btn-secondary">Login</a>
+      <a href="/register.html" class="btn">Register</a>
+    </div>
+  </header>
+
+  <main class="container" style="margin-top: 2rem;">
+    <div class="card" style="text-align: center; padding: 2.5rem 1rem;">
+      <h1 style="margin-bottom: 0.5rem; font-size: 2rem;">Fund Your Future</h1>
+      <p style="color: var(--muted); margin-bottom: 1.5rem;">Search verified scholarships, check eligibility criteria, and apply in minutes.</p>
+      <input type="text" id="search-input" class="form-control" placeholder="Search by scholarship name or major..." style="max-width: 500px; margin: 0 auto;" />
+    </div>
+
+    <h2>Available Scholarships</h2>
+    <div id="scholarship-list" class="grid" style="margin-top: 1rem;"></div>
+    <div id="pagination-box" style="display: flex; justify-content: center; align-items: center; margin-top: 2rem;"></div>
+  </main>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    let scholarshipsCache = null;
+    let currentPage = 1;
+    const pageSize = 9;
+
+    async function loadScholarships(search = "") {
+      const listEl = document.getElementById("scholarship-list");
+      setLoading(listEl, true, "Loading scholarships...");
+      
+      try {
+        if (!scholarshipsCache) {
+          const data = await apiFetch("/scholarships");
+          scholarshipsCache = Array.isArray(data) ? data : (data.scholarships || []);
+        }
+
+        const filtered = scholarshipsCache.filter(s => 
+          s.name.toLowerCase().includes(search.toLowerCase()) || 
+          (s.eligibility && s.eligibility.toLowerCase().includes(search.toLowerCase()))
+        );
+
+        const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+        if (currentPage > totalPages) currentPage = 1;
+        
+        const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+        if (paginated.length === 0) {
+          listEl.innerHTML = `<p style="color: var(--muted); grid-column: 1/-1; text-align: center;">No scholarships found.</p>`;
+        } else {
+          listEl.innerHTML = paginated.map(s => `
+            <div class="card">
+              <h3>${s.name}</h3>
+              <p style="color: var(--primary); font-weight: 600; margin: 0.5rem 0;">₹${Number(s.amount || 0).toLocaleString('en-IN')}</p>
+              <p style="font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem;">Deadline: ${s.deadline || 'Open'}</p>
+              <p style="font-size: 0.95rem; margin-bottom: 1rem;">${s.eligibility || 'Check requirements inside.'}</p>
+              <a href="/login.html" class="btn" style="width: 100%; text-align: center;">Apply Now</a>
+            </div>
+          `).join("");
+        }
+
+        renderPagination(document.getElementById("pagination-box"), currentPage, totalPages, (p) => {
+          currentPage = p;
+          loadScholarships(search);
+        });
+      } catch (err) {
+        listEl.innerHTML = `<p style="color: #dc2626; grid-column: 1/-1; text-align: center;">Failed to load scholarships.</p>`;
+      }
+    }
+
+    document.getElementById("search-input").addEventListener("input", debounce((e) => {
+      currentPage = 1;
+      loadScholarships(e.target.value);
+    }, 300));
+
+    loadScholarships();
+  </script>
+</body>
+</html>

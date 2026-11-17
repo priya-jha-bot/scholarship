@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reviewer Dashboard - ScholarshipPortal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h3 style="margin-bottom: 1.5rem;">⭐ Reviewer Portal</h3>
+      <nav>
+        <a href="/reviewer/dashboard.html" class="active">Dashboard</a>
+        <a href="#" onclick="logout()">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <h2>Verified Applications Queue</h2>
+      <p style="color: var(--muted); margin-bottom: 1.5rem;">Applications below have passed admin verification and are ready for academic review.</p>
+
+      <div class="table-wrap card">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>University & Major</th>
+              <th>Scholarship</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="reviewer-tbody">
+            <tr><td colspan="5" style="text-align: center; color: var(--muted);">Loading verified queue...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    requireRole("reviewer");
+
+    async function loadReviewerQueue() {
+      const tbody = document.getElementById("reviewer-tbody");
+      try {
+        const data = await apiFetch("/reviewer/applications");
+        const apps = Array.isArray(data) ? data : (data.applications || []);
+
+        // Only show verified applications
+        const verifiedApps = apps.filter(a => (a.status || "").toLowerCase() === "verified");
+
+        if (verifiedApps.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--muted);">No verified applications in the queue right now.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = verifiedApps.map(app => `
+          <tr>
+            <td><strong>${app.name || 'Student #' + app.studentId}</strong></td>
+            <td>${app.university || '-'}<br><span style="font-size: 0.8rem; color: var(--muted);">${app.major || '-'} (GPA: ${app.gpa || '-'})</span></td>
+            <td>${app.scholarshipName || 'Scholarship #' + app.scholarshipId}</td>
+            <td>${renderBadge(app.status)}</td>
+            <td>
+              <a href="/reviewer/review.html?id=${app.id}" class="btn" style="padding: 0.35rem 0.7rem; font-size: 0.85rem;">Review Application</a>
+            </td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #dc2626;">Failed to load queue.</td></tr>`;
+      }
+    }
+
+    loadReviewerQueue();
+  </script>
+</body>
+</html>
