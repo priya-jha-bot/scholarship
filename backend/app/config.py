@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,9 +49,10 @@ class Settings(BaseSettings):
             host = make_url(self.database_url).host
         except ArgumentError as e:
             raise RuntimeError("DATABASE_URL is not a valid database URL.") from e
-        if self.env != "dev" and host in ("localhost", "127.0.0.1", "::1"):
+        hosted = self.env != "dev" or os.environ.get("RENDER") == "true"      # Render always sets RENDER=true
+        if hosted and host in ("localhost", "127.0.0.1", "::1"):
             raise RuntimeError(
-                "DATABASE_URL points to localhost but ENV is not 'dev'. Inside a container localhost is the container itself. "
+                "DATABASE_URL points to localhost but this is a hosted/production run (ENV is not 'dev' or RENDER=true). Inside a container localhost is the container itself. "
                 "Set DATABASE_URL in the host's environment settings to your managed PostgreSQL Internal Database URL "
                 "(and make sure no local .env file was copied into the image)."
             )

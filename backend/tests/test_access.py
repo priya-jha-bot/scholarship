@@ -153,3 +153,12 @@ def test_database_url_is_normalised_and_localhost_is_refused_outside_dev():
     with pytest.raises(RuntimeError, match="empty"):
         Settings(env="prod", database_url="", jwt_secret="x" * 40, field_encryption_key=key).validate_for_runtime()
     Settings(env="dev", database_url="postgresql://u:p@localhost:5432/x", field_encryption_key=key).validate_for_runtime()   # dev may use localhost
+
+
+def test_localhost_database_is_refused_on_render_even_if_env_is_dev(monkeypatch):
+    import pytest
+    from app.config import Settings
+    monkeypatch.setenv("RENDER", "true")
+    s = Settings(env="dev", database_url="postgresql://u:p@127.0.0.1:5433/x", field_encryption_key="k" * 44)
+    with pytest.raises(RuntimeError, match="localhost"):
+        s.validate_database_url()

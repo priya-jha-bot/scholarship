@@ -3,6 +3,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
+# never let a local .env ride along in the image: settings must come from the host's environment
+RUN rm -f .env .env.*
 RUN useradd -m app && mkdir -p /app/uploads && chown -R app /app
 USER app
 EXPOSE 8000

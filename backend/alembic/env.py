@@ -1,5 +1,6 @@
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import make_url
 
 from app.config import get_settings
 from app.models import Base
@@ -7,6 +8,8 @@ from app.models import Base
 config = context.config
 settings = get_settings()
 settings.validate_database_url()          # refuse to migrate a localhost database in production
+_u = make_url(settings.database_url)
+print(f"[alembic] migrating database host={_u.host} port={_u.port} name={_u.database}  (ENV={settings.env})", flush=True)
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
