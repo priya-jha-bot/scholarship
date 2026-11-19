@@ -1,5 +1,8 @@
 from functools import lru_cache
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 
 class Settings(BaseSettings):
@@ -25,11 +28,39 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     mail_from: str = "no-reply@scholarship.local"
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalise_db_url(cls, v):
+        """Hosts such as Render hand out postgres:// or postgresql:// URLs; SQLAlchemy needs the driver named."""
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("postgres://"):
+                v = "postgresql+psycopg2://" + v[len("postgres://"):]
+            elif v.startswith("postgresql://"):
+                v = "postgresql+psycopg2://" + v[len("postgresql://"):]
+        return v
+
+    def validate_database_url(self) -> None:
+        """Fail loudly instead of silently using a local database. Used by the app AND by Alembic (which runs first)."""
+        if not self.database_url:
+            raise RuntimeError("DATABASE_URL is empty. Set it in the environment (on Render: the Postgres Internal Database URL).")
+        try:
+            host = make_url(self.database_url).host
+        except ArgumentError as e:
+            raise RuntimeError("DATABASE_URL is not a valid database URL.") from e
+        if self.env != "dev" and host in ("localhost", "127.0.0.1", "::1"):
+            raise RuntimeError(
+                "DATABASE_URL points to localhost but ENV is not 'dev'. Inside a container localhost is the container itself. "
+                "Set DATABASE_URL in the host's environment settings to your managed PostgreSQL Internal Database URL "
+                "(and make sure no local .env file was copied into the image)."
+            )
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     def validate_for_runtime(self) -> None:
+        self.validate_database_url()
         if not self.field_encryption_key:
             raise RuntimeError(
                 "FIELD_ENCRYPTION_KEY is not set. Run `python -m scripts.init_env` or generate one with "

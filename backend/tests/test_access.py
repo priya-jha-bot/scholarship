@@ -138,3 +138,18 @@ def test_alembic_migration_matches_models(tmp_path):
     finally:
         os.environ.pop("DATABASE_URL", None)
         get_settings.cache_clear()
+
+
+def test_database_url_is_normalised_and_localhost_is_refused_outside_dev():
+    import pytest
+    from app.config import Settings
+    key = "k" * 44
+    for given in ("postgres://u:p@db.example.com/x", "postgresql://u:p@db.example.com/x"):
+        assert Settings(env="prod", database_url=given, jwt_secret="x" * 40, field_encryption_key=key).database_url \
+            == "postgresql+psycopg2://u:p@db.example.com/x"
+    bad = Settings(env="prod", database_url="postgresql://u:p@localhost:5432/x", jwt_secret="x" * 40, field_encryption_key=key)
+    with pytest.raises(RuntimeError, match="localhost"):
+        bad.validate_for_runtime()
+    with pytest.raises(RuntimeError, match="empty"):
+        Settings(env="prod", database_url="", jwt_secret="x" * 40, field_encryption_key=key).validate_for_runtime()
+    Settings(env="dev", database_url="postgresql://u:p@localhost:5432/x", field_encryption_key=key).validate_for_runtime()   # dev may use localhost

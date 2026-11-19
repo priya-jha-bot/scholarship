@@ -5,7 +5,9 @@ from app.config import get_settings
 from app.models import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+settings = get_settings()
+settings.validate_database_url()          # refuse to migrate a localhost database in production
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
